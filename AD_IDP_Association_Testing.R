@@ -1,6 +1,6 @@
 #some example code for the paper entitled "Integrating Brain Imaging Endophenotypes with GWAS for Alzheimer’s Disease"
 #requires version R/3.5.0 or higher
-library("dplyr"); library("aSPU"); library("gsmr"); library("tidyr"); library(devtools); library(TwoSampleMR); library(MRInstruments)
+library("dplyr"); library("aSPU"); library("gsmr"); library("tidyr"); library("devtools"); library("TwoSampleMR"); library("MRInstruments")
 
 #set p-value threshold
 thresh <- 5*10^(-5)
@@ -28,18 +28,21 @@ exposure_dat <- format_data(GWAS, header = TRUE, snp_col = "SNP", beta_col = "BE
                             pval_col = "P",phenotype_col="Phenotype",type = "exposure",chr_col = "CHR",pos_col = "BP")
 
 #MRBase function for LD clumping (uses the same procedure as plink with the EUR 1000G panel, n = 503)
-exposure_dat_clumped <- clump_data(exposure_dat, clump_kb = 1000, clump_r2 = 0.001)
+exposure_dat_clumped <- clump_data(exposure_dat, clump_kb = 1000, clump_r2 = 0.1)
 exposure_dat_clumped <- exposure_dat_clumped %>% filter(pval.exposure <= thresh)
+
+exposure_dat_clumped_2SMR <- clump_data(exposure_dat, clump_kb = 1000, clump_r2 = 0.001)
+exposure_dat_clumped_2SMR <- exposure_dat_clumped %>% filter(pval.exposure <= thresh)
 
 #combine outcome and exposure data- this data can then be used directly in MRBase 2-SMR functions
 dat <- harmonise_data(exposure_dat = exposure_dat_clumped, outcome_dat = outcome_dat)
+dat_2SMR <- harmonise_data(exposure_dat = exposure_dat_clumped_2SMR, outcome_dat = outcome_dat)
 
 #These give the same estimates as those using plink + the 1000G EUR data 
-#with_alleles = F just omits alleles being appended to SNP names in the output
 LD <- ld_matrix(dat$SNP, with_alleles = FALSE) 
 
 #run all available MR meta analysis approaches for the given exposure phenotype
-SMR <- mr(dat)
+SMR <- mr(dat_2SMR)
 
 #MR results in wide format, generally a nicer format to use for plots etc. 
 mr_wide <- SMR %>%
@@ -53,7 +56,7 @@ Z <- as.matrix(as.numeric(dat$beta.outcome)/as.numeric(dat$se.outcome), nrow = n
 Z_mat <- diag(length(Z)); diag(Z_mat) <- Z
 beta <- matrix(dat$beta.exposure, nrow = nrow(dat)); beta_mat <- diag(length(beta)); diag(beta_mat) <- beta; rownames(beta_mat) <- dat$SNP
 table(rownames(LD) == rownames(beta_mat)) #should all be TRUE
-Tsum <- t(beta)%*%Z; VarTsum <- t(beta)%*%LD%*%beta;
+Tsum <- t(beta)%*%Z; VarTsum <- t(beta)%*%LD%*%beta; #Tsum should be equal to the SPUs1 estimate in the output from the aSPUs function below
 SPU <- aSPUs(beta_mat %*% Z, beta_mat %*%LD%*%beta_mat, n.perm = 1000, Ps = FALSE, prune = FALSE) 
 
 
